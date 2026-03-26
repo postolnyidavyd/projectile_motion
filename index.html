@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Моделювання прямолінійного руху</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+    <script src="main.js" defer></script>
+</head>
+<body>
+<div id="sidebar">
+    <div id="controls">
+        <p class="section-title">Управління анімацією</p>
+        <div class="btn-row">
+        <button id="btn-play">▶ Грати</button>
+        <button id="btn-pause">⏸ Пауза</button>
+        <button id="btn-reset">■ Скинути</button>
+        </div>
+    </div>
+    <div id="camera-controls">
+        <p class="section-title">Управління камерою</p>
+        <div class="btn-row">
+        <button id="btn-reset-cam">↺ Скинути камеру</button>
+        </div>
+    </div>
+    <div id="sliders">
+        <p class="section-title">Параметри</p>
+        <div class="slider-group">
+            <label>v₀: <span id="val-v0">20</span> м/с</label>
+            <input type="range" id="sl-v0" min="1" max="40" value="20" step="1">
+        </div>
+        <div class="slider-group">
+            <label>φ: <span id="val-phi">40</span>°</label>
+            <input type="range" id="sl-phi" min="0" max="360" value="40" step="1">
+        </div>
+        <div class="slider-group">
+            <label>a: <span id="val-a">3</span> м/с²</label>
+            <input type="range" id="sl-a" min="-10" max="10" value="3" step="0.5">
+        </div>
+        <div class="slider-group">
+            <label>T: <span id="val-t">6</span> с</label>
+            <input type="range" id="sl-t" min="1" max="20" value="6" step="1">
+        </div>
+        <div class="slider-group">
+            <label>x₀: <span id="val-x0">0</span> м</label>
+            <input type="range" id="sl-x0" min="-20" max="20" value="0" step="1">
+        </div>
+        <div class="slider-group">
+            <label>y₀: <span id="val-y0">0</span> м</label>
+            <input type="range" id="sl-y0" min="-20" max="20" value="0" step="1">
+        </div>
+    </div>
+
+    <div id="stats">
+        <p class="section-title">Стан</p>
+        <div class="stat">x(t): <span id="stat-x">0</span> м</div>
+        <div class="stat">y(t): <span id="stat-y">0</span> м</div>
+        <div class="stat">t: <span id="stat-t">0</span> с</div>
+        <div class="stat">v(t): <span id="stat-v">0</span> м/с</div>
+    </div>
+</div>
+<div id="canvas-wrapper">
+<canvas id="three-canvas"></canvas>
+</div>
+
+</body>
+</html>
