@@ -1,59 +1,48 @@
 console.log('Three.js версія:', THREE.REVISION);
-// region ----- Змінні та константи -----
+
+// region ----- Константи -----
 const canvasWrapper = document.getElementById('canvas-wrapper');
 const canvas = document.getElementById('three-canvas');
-let Z_SCALE = 5;
-const DEFAULT_SPHERICAL = {theta: -0.8, phi: 1.0, radius: 120};
-const DEFAULT_TARGET = new THREE.Vector3(20, 10, 20);
+const DEFAULT_SPHERICAL = { theta: -0.8, phi: 1.0, radius: 120 };
+const DEFAULT_TARGET = new THREE.Vector3(20, 10, 0);
+const toRadians = (angle) => angle * Math.PI / 180;
 
+const COLORS = {
+    noAir: 0x00cfff,   // червона — без опору
+    air:   0xff4444,   // блакитна — з опором
+};
+// endregion
+
+// region ----- Параметри -----
 const params = {
-    x0: 0,
-    y0: 0,
-    v0: 20,
-    phi: 40,
-    a: 3,
-    T: 6,
-    N: 300
-}
+    x0: 0, y0: 0, z0: 0,
+    v0: 30,
+    alpha: 45,
+    beta: 0,
+    g: 9.81,
+    k: 0.05,
+    deltaT: 0.02,
+};
 // endregion
 
-// region ----- Рендер -----
-const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
+// region ----- Рендер / Сцена / Камера -----
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(canvasWrapper.clientWidth, canvasWrapper.clientHeight);
-renderer.setClearColor(0x111111); // Темний фон
-// endregion
+renderer.setClearColor(0x111111);
 
-// region ----- Сцена та камера -----
 const scene = new THREE.Scene();
-
 const camera = new THREE.PerspectiveCamera(
-    75,// FOV
-    canvasWrapper.clientWidth / canvasWrapper.clientHeight, // співівідношення сторін
-    0.1,// мінімальна відстан
-    1000 // максимальна відстань
+    75, canvasWrapper.clientWidth / canvasWrapper.clientHeight, 0.1, 2000
 );
-
-
-// camera.lookAt(0, 0, 0); // Направляємо камеру на центр сцени
-
 // endregion
 
 // region ----- Керування камерою -----
-let isDragging = false; // Чи відбувається перетягування
-let isPanning = false;// пересування камери
-
-let previousMousePosition = {x: 0, y: 0}; // Попередня позиція миші
-let spherical = {theta: -0.8, phi: 1.0, radius: 120}; // Сферичні координати камери
-// A саме theta - кут навколо вертикальної осі (горизонтальний оберт)
-// phi - вертикальний кут (нахил камери вгору або вниз)
-// radius - відстань від камери до центру сцени.
-let target = new THREE.Vector3(20, 10, 20); // Центр сцени, на який дивиться камера
+let isDragging = false, isPanning = false;
+let previousMousePosition = { x: 0, y: 0 };
+let spherical = { ...DEFAULT_SPHERICAL };
+let target = DEFAULT_TARGET.clone();
 
 function updateCamera() {
-    // Конвертуємо сферичні координати в декартові
-    // x = r * sin(phi) * cos(theta)
-    // y = r * cos(phi)
-    // z = r * sin(phi) * sin(theta)
     const x = target.x + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
     const y = target.y + spherical.radius * Math.cos(spherical.phi);
     const z = target.z + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
@@ -61,86 +50,46 @@ function updateCamera() {
     camera.lookAt(target);
 }
 
-canvasWrapper.addEventListener('mousedown', (event) => {
-    if (event.button === 0) isDragging = true;
-    if (event.button === 2) isPanning = true;
-    // Зберігаємо початкову позицію щоб потім порахувати зміщення
-    previousMousePosition = {x: event.clientX, y: event.clientY};
-})
-canvasWrapper.addEventListener("contextmenu", (e) => {
-    e.preventDefault()
+canvasWrapper.addEventListener('mousedown', (e) => {
+    if (e.button === 0) isDragging = true;
+    if (e.button === 2) isPanning = true;
+    previousMousePosition = { x: e.clientX, y: e.clientY };
 });
-window.addEventListener('mouseup', () => {
-    isDragging = false;
-    isPanning = false;
-})
+canvasWrapper.addEventListener('contextmenu', (e) => e.preventDefault());
+window.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
 
-window.addEventListener('mousemove', (event) => {
+window.addEventListener('mousemove', (e) => {
     if (!isDragging && !isPanning) return;
-    const xMovement = event.clientX - previousMousePosition.x;
-    const yMovement = event.clientY - previousMousePosition.y;
+    const dx = e.clientX - previousMousePosition.x;
+    const dy = e.clientY - previousMousePosition.y;
+    previousMousePosition = { x: e.clientX, y: e.clientY };
 
-    previousMousePosition = {x: event.clientX, y: event.clientY};
-    if(isDragging){
-        spherical.theta -= xMovement * 0.005; // Чутливість до горизонтального руху
-        // Обмежуємо вертикальний кут, щоб камера не переверталася
-
-        // 0.1 це найменший кут, який може мати камера
-        // Math.PI - 0.1 це найбільший кут який може мати камера
-        // Це дозволяє камері обертатися навколо сцени, але не перевертатися
-        spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi - yMovement * 0.005));
-        updateCamera();
+    if (isDragging) {
+        spherical.theta -= dx * 0.005;
+        spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi - dy * 0.005));
     }
     if (isPanning) {
         const right = new THREE.Vector3();
         const up = new THREE.Vector3(0, 1, 0);
         const dir = new THREE.Vector3();
-
         camera.getWorldDirection(dir);
-        // вектор який завжди вправо відносно камери, потрібно для переміщення по горизонтальній осі
         right.crossVectors(dir, up).normalize();
-
-        const panSpeed = spherical.radius * 0.002;
-        target.addScaledVector(right, -xMovement * panSpeed);
-        target.addScaledVector(up, yMovement * panSpeed);
-        updateCamera();
+        const speed = spherical.radius * 0.002;
+        target.addScaledVector(right, -dx * speed);
+        target.addScaledVector(up, dy * speed);
     }
+    updateCamera();
+});
 
-})
-
-canvasWrapper.addEventListener('wheel', (event) => {
-    spherical.radius = Math.max(12, Math.min(300, spherical.radius * (1 + event.deltaY * 0.001)));
+canvasWrapper.addEventListener('wheel', (e) => {
+    spherical.radius = Math.max(5, Math.min(500, spherical.radius * (1 + e.deltaY * 0.001)));
     updateCamera();
 });
 
 updateCamera();
 // endregion
 
-// region ----- Обчислення масиву точок -----
-function calculatePoints(params) {
-    // щоб z була пропорційна всім іншим координатам
-    // Z_SCALE = params.v0;
-    // в js функції тригон. потребують радіани
-    const phi = params.phi * Math.PI / 180;
-    const vx = params.v0 * Math.cos(phi);
-    const vy = params.v0 * Math.sin(phi);
-
-    const ax = params.a * Math.cos(phi);
-    const ay = params.a * Math.sin(phi);
-
-    let dt = params.T / params.N;
-    const points = [];
-    for (let i = 0; i < params.N; i++) {
-        const t = i * dt;
-        const x = params.x0 + vx * t + 0.5 * ax * t ** 2;
-        const y = params.y0 + vy * t + 0.5 * ay * t ** 2;
-        const z = t * Z_SCALE;
-        const v = params.v0 + params.a * t;
-        points.push({x, y, z, t, v});
-    }
-
-    return points
-}
+// region ----- Обчислення -----
 function calculateDataForNoAirResistance(params) {
     const { x0, y0, z0, v0, g, deltaT } = params;
     const alpha = toRadians(params.alpha);
@@ -163,7 +112,6 @@ function calculateDataForNoAirResistance(params) {
         const v = Math.sqrt(vx0 ** 2 + (vy0 - g * t) ** 2 + vz0 ** 2);
         points.push({ x, y, z, v, t });
     }
-
     return { T, H, L, points };
 }
 
@@ -179,12 +127,10 @@ function calculateDataForAirResistance(params) {
     let x = x0, y = y0, z = z0, t = 0;
     let H = y0;
     let crossedZero = false;
-
     const points = [];
 
     while (!crossedZero || y >= 0) {
         if (y >= 0) crossedZero = true;
-
         points.push({ x, y, z, v: Math.sqrt(vx**2 + vy**2 + vz**2), t });
 
         const v  = Math.sqrt(vx**2 + vy**2 + vz**2);
@@ -206,317 +152,268 @@ function calculateDataForAirResistance(params) {
 
     const T = t;
     const L = Math.sqrt((x - x0)**2 + (z - z0)**2);
-
     return { T, H, L, points };
 }
-let points = calculatePoints(params);
-let firstP = points[0];
-updateStatistic(firstP.x, firstP.y, firstP.t, firstP.v);
+
+let dataNoAir = calculateDataForNoAirResistance(params);
+let dataAir   = calculateDataForAirResistance(params);
 // endregion
 
 // region ----- Сітка та осі -----
 let gridHelper = null;
-// група всіх осей з підписами
-let axesGroup = null;
+let axesGroup  = null;
 
 function buildScene() {
     if (gridHelper) scene.remove(gridHelper);
-    if (axesGroup) scene.remove(axesGroup);
-    const pointsLength = points.length
-    const maxHorizontal = Math.max(
-        Math.abs(points[pointsLength - 1].x),
-        Math.abs(points[pointsLength - 1].y)
-    );
-    //Округляємо до 10 і додаємо відступ у 20 одиниць
-    const sceneSize = Math.ceil(maxHorizontal / 10) * 10 + 20;
+    if (axesGroup)  scene.remove(axesGroup);
 
-    //Побудова сітки
-    gridHelper = new THREE.GridHelper(
-        sceneSize * 2,
-        sceneSize / 5, // клітинка 5 одиниць
-        0x444444,
-        0x222222
-    )
+    const allPoints = [...dataNoAir.points, ...dataAir.points];
+    const maxVal = allPoints.reduce((m, p) => Math.max(m, Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)), 0);
+    const sceneSize = Math.ceil(maxVal / 10) * 10 + 20;
+
+    gridHelper = new THREE.GridHelper(sceneSize * 2, sceneSize / 5, 0x444444, 0x222222);
     scene.add(gridHelper);
 
-    //Осі, підписи і відмітки
     axesGroup = new THREE.Group();
-    const horizontalLength = sceneSize;
-    const markFreq = 10; // частота відміток
-    const markSize = 0.5;
+    const len = sceneSize;
+    const markFreq = 10, markSize = 0.5;
+    const colX = 0xff4444, colY = 0x44ff44, colZ = 0x4488ff;
 
-    const colors = {
-        x: 0xff4444,
-        y: 0x44ff44,
-        z: 0x4488ff
-    };
-
-    function makeLine(from, to, color) {
-        const g = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(...from),
-            new THREE.Vector3(...to)
-        ]);
-        return new THREE.Line(g, new THREE.LineBasicMaterial({color}));
+    function line(from, to, color) {
+        const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...from), new THREE.Vector3(...to)]);
+        return new THREE.Line(g, new THREE.LineBasicMaterial({ color }));
     }
-    function makeDashedLine(from, to, color) {
-        const points = [];
-        const start = new THREE.Vector3(...from);
-        const end = new THREE.Vector3(...to);
-        const segments = 20;
-        for (let i = 0; i < segments; i += 2) {
-            points.push(start.clone().lerp(end, i / segments));
-            points.push(start.clone().lerp(end, (i + 0.8) / segments));
+    function dashed(from, to, color) {
+        const pts = [], s = new THREE.Vector3(...from), e = new THREE.Vector3(...to);
+        for (let i = 0; i < 20; i += 2) {
+            pts.push(s.clone().lerp(e, i / 20));
+            pts.push(s.clone().lerp(e, (i + 0.8) / 20));
         }
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color }));
+        return new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color }));
     }
-    function makeLabel(text, position, color) {
-        // Three не рендерить просто 2d текст тому для його створення треба працювати з костилями
-        // Створюємо канву
+    function label(text, pos, color) {
         const cv = document.createElement('canvas');
-        cv.width = 256;
-        cv.height = 128;
-        const ctx = cv.getContext('2d');
-        ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
-        ctx.font = 'bold 96px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, cv.width / 2, cv.height / 2);
-        const sprite = new THREE.Sprite(
-            new THREE.SpriteMaterial({
-                // перетворює canvas в текстуру, який перетворює в спрайт - ел. завжди повернутий до камери
-                map: new THREE.CanvasTexture(cv),
-                transparent: true
-            })
-        );
-        sprite.position.set(...position);
-        sprite.scale.set(cv.width / 32, cv.height / 32, 1); // пропорційно до canvas
+        cv.width = 256; cv.height = 128;
+        const c = cv.getContext('2d');
+        c.fillStyle = `#${color.toString(16).padStart(6,'0')}`;
+        c.font = 'bold 96px monospace';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(text, 128, 64);
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true }));
+        sprite.position.set(...pos);
+        sprite.scale.set(8, 4, 1);
         return sprite;
     }
 
-    // вісь x
-    axesGroup.add(makeLine([0, 0, 0], [horizontalLength, 0, 0], colors.x));
-    axesGroup.add(makeLabel('X', [horizontalLength + 3, 0, 0], colors.x));
-    axesGroup.add(makeDashedLine([0,0,0], [-horizontalLength, 0, 0], colors.x));
-    for (let i = -horizontalLength; i <= horizontalLength; i += markFreq) {
+    // X
+    axesGroup.add(line([0,0,0],[len,0,0], colX));
+    axesGroup.add(dashed([0,0,0],[-len,0,0], colX));
+    axesGroup.add(label('X', [len+4,0,0], colX));
+    for (let i = -len; i <= len; i += markFreq) {
         if (i === 0) continue;
-        axesGroup.add(makeLine([i, 0, -markSize], [i, 0, markSize], colors.x));
-        axesGroup.add(makeLabel(`${i}`, [i, 0, -2], colors.x));
+        axesGroup.add(line([i,0,-markSize],[i,0,markSize], colX));
+        axesGroup.add(label(`${i}`, [i,0,-3], colX));
     }
-
-    // вісь y наша вісь z
-    const zMax = Math.ceil(params.T * Z_SCALE);
-    axesGroup.add(makeLine([0, 0, 0], [0, zMax + 5, 0], colors.z));
-    axesGroup.add(makeLabel('Z=час', [0, zMax + 8, 0], colors.z));
-    for (let i = markFreq; i <= zMax; i += markFreq) {
-        axesGroup.add(makeLine([-markSize, i, 0], [markSize, i, 0], colors.z));
-        axesGroup.add(makeLabel(`${(i / Z_SCALE).toFixed(1)}с`, [-5, i, 0], colors.z));
+    // Y (висота)
+    axesGroup.add(line([0,0,0],[0,len,0], colY));
+    axesGroup.add(label('Y', [0,len+4,0], colY));
+    for (let i = markFreq; i <= len; i += markFreq) {
+        axesGroup.add(line([-markSize,i,0],[markSize,i,0], colY));
+        axesGroup.add(label(`${i}`, [-4,i,0], colY));
     }
-    // вісь z наша y
-    axesGroup.add(makeLine([0, 0, 0], [0, 0, horizontalLength], colors.y));
-    axesGroup.add(makeLabel('Y', [0, 0, horizontalLength + 3], colors.y));
-    axesGroup.add(makeDashedLine([0,0,0], [0, 0, -horizontalLength], colors.y));
-    for (let i = -horizontalLength; i <= horizontalLength; i += markFreq) {
-        if(i === 0)continue;
-        axesGroup.add(makeLine([-markSize, 0, i], [markSize, 0, i], colors.y));
-        axesGroup.add(makeLabel(`${i}`, [-3, 0, i], colors.y));
+    // Z
+    axesGroup.add(line([0,0,0],[0,0,len], colZ));
+    axesGroup.add(dashed([0,0,0],[0,0,-len], colZ));
+    axesGroup.add(label('Z', [0,0,len+4], colZ));
+    for (let i = -len; i <= len; i += markFreq) {
+        if (i === 0) continue;
+        axesGroup.add(line([-markSize,0,i],[markSize,0,i], colZ));
+        axesGroup.add(label(`${i}`, [-3,0,i], colZ));
     }
 
     scene.add(axesGroup);
-
 }
-
-buildScene();
 // endregion
 
-// region ----- Візуалізація траєкторії -----
-function buildTrajectory() {
-    // Міняємо місцями y та z, щоб зробити часово-просторову візуалізацію
-    const vectors = points.map(p => new THREE.Vector3(p.x, p.z, p.y));
-    //Геометрія це набір вершин, які можна використовувати для створення ліній, площин або інших форм
-    const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
-    const material = new THREE.LineBasicMaterial({color: 0xff0000});
-    const line = new THREE.Line(geometry, material);
+// region ----- Об'єкти сцени -----
+let lineNoAir, lineAir, ballNoAir, ballAir, trailNoAir, trailAir;
+
+function buildLine(points, color) {
+    const vecs = points.map(p => new THREE.Vector3(p.x, p.y, p.z));
+    const geo  = new THREE.BufferGeometry().setFromPoints(vecs);
+    const mat  = new THREE.LineBasicMaterial({ color });
+    const line = new THREE.Line(geo, mat);
     scene.add(line);
-
-    return line
+    return line;
 }
 
-let trajectoryLine = buildTrajectory();
-// endregion
-
-// region ----- Створення кульку -----
-function createBall() {
-    const geometry = new THREE.SphereGeometry(
-        1.25, // радіус
-        32,   // кількість сегментів по горизонталі
-        32    // кількість сегментів по вертикалі
+function buildBall(p, color) {
+    const ball = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 32, 32),
+        new THREE.MeshBasicMaterial({ color })
     );
-    const material = new THREE.MeshBasicMaterial({color: 0x00cfff});
-    const ball = new THREE.Mesh(geometry, material);
-
-    const start = points[0];
-    ball.position.set(start.x, start.z, start.y);
-
+    ball.position.set(p.x, p.y, p.z);
     scene.add(ball);
     return ball;
 }
 
-let ball = createBall();
-// endregion
-
-// region ----- Створення хвоста кульки -----
-function createTrail() {
-    // задаємо строгий за розміром масив для буфера
-    const positions = new Float32Array(points.length * 3);
-
-    for (let i = 0; i < points.length; i++) {
-        positions[i * 3] = points[i].x;
-        positions[i * 3 + 1] = points[i].z;
-        positions[i * 3 + 2] = points[i].y;
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setDrawRange(0, 0); // нічого не малюєм на старті
-
-    const material = new THREE.LineBasicMaterial({color: 0x00cfff});
-    const trail = new THREE.Line(geometry, material);
+function buildTrail(points, color) {
+    const pos = new Float32Array(points.length * 3);
+    points.forEach((p, i) => { pos[i*3]=p.x; pos[i*3+1]=p.y; pos[i*3+2]=p.z; });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setDrawRange(0, 0);
+    const trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ color }));
     scene.add(trail);
-
     return trail;
 }
 
-let trail = createTrail();
+function disposeObj(obj) {
+    if (!obj) return;
+    obj.geometry?.dispose();
+    obj.material?.dispose();
+    scene.remove(obj);
+}
+
+function rebuildObjects() {
+    disposeObj(lineNoAir); disposeObj(lineAir);
+    disposeObj(ballNoAir); disposeObj(ballAir);
+    disposeObj(trailNoAir); disposeObj(trailAir);
+
+    lineNoAir  = buildLine(dataNoAir.points, COLORS.noAir);
+    lineAir    = buildLine(dataAir.points,   COLORS.air);
+    ballNoAir  = buildBall(dataNoAir.points[0], COLORS.noAir);
+    ballAir    = buildBall(dataAir.points[0],   COLORS.air);
+    trailNoAir = buildTrail(dataNoAir.points, COLORS.noAir);
+    trailAir   = buildTrail(dataAir.points,   COLORS.air);
+}
+// endregion
+
+// region ----- Статистика -----
+function updateStats() {
+    const na = dataNoAir, a = dataAir;
+    // Фінальні показники
+    document.getElementById('stat-na-T').textContent = na.T.toFixed(2);
+    document.getElementById('stat-na-H').textContent = na.H.toFixed(2);
+    document.getElementById('stat-na-L').textContent = na.L.toFixed(2);
+    document.getElementById('stat-a-T').textContent  = a.T.toFixed(2);
+    document.getElementById('stat-a-H').textContent  = a.H.toFixed(2);
+    document.getElementById('stat-a-L').textContent  = a.L.toFixed(2);
+}
+
+function updateLiveStats(pNa, pA) {
+    if (pNa) {
+        document.getElementById('stat-na-x').textContent = pNa.x.toFixed(2);
+        document.getElementById('stat-na-y').textContent = pNa.y.toFixed(2);
+        document.getElementById('stat-na-z').textContent = pNa.z.toFixed(2);
+        document.getElementById('stat-na-v').textContent = pNa.v.toFixed(2);
+        document.getElementById('stat-na-t').textContent = pNa.t.toFixed(2);
+    }
+    if (pA) {
+        document.getElementById('stat-a-x').textContent = pA.x.toFixed(2);
+        document.getElementById('stat-a-y').textContent = pA.y.toFixed(2);
+        document.getElementById('stat-a-z').textContent = pA.z.toFixed(2);
+        document.getElementById('stat-a-v').textContent = pA.v.toFixed(2);
+        document.getElementById('stat-a-t').textContent = pA.t.toFixed(2);
+    }
+}
 // endregion
 
 // region ----- Анімація -----
-let playing = false;
-let animTime = 0;
-let lastTime = null;
+let playing = false, animTime = 0, lastTime = null;
 
 function animationLoop(timestamp) {
     requestAnimationFrame(animationLoop);
+
     if (playing) {
         if (!lastTime) {
             lastTime = timestamp;
         } else {
-            const dtReal = (timestamp - lastTime) / 1000;
-            animTime += dtReal;
+            animTime += (timestamp - lastTime) / 1000;
             lastTime = timestamp;
         }
-        const frac = Math.min(animTime / params.T, 1);// для захисту
-        const index = Math.floor(frac * (points.length - 1));
-        const {x, y, z, t, v} = points[index];
 
-        ball.position.set(x, z, y);
-        trail.geometry.setDrawRange(0, index + 1);
+        const maxT = Math.max(dataNoAir.T, dataAir.T);
 
-        updateStatistic(x, y, t, v);
+        // без опору
+        const fracNa  = Math.min(animTime / dataNoAir.T, 1);
+        const idxNa   = Math.floor(fracNa * (dataNoAir.points.length - 1));
+        const pNa     = dataNoAir.points[idxNa];
+        ballNoAir.position.set(pNa.x, pNa.y, pNa.z);
+        trailNoAir.geometry.setDrawRange(0, idxNa + 1);
 
-        if (animTime >= params.T) {
+        // з опором
+        const fracA   = Math.min(animTime / dataAir.T, 1);
+        const idxA    = Math.floor(fracA * (dataAir.points.length - 1));
+        const pA      = dataAir.points[idxA];
+        ballAir.position.set(pA.x, pA.y, pA.z);
+        trailAir.geometry.setDrawRange(0, idxA + 1);
+
+        updateLiveStats(pNa, pA);
+
+        if (animTime >= maxT) {
             playing = false;
             animTime = 0;
             lastTime = null;
         }
     }
+
     renderer.render(scene, camera);
 }
-animationLoop();
 // endregion
 
 // region ----- Кнопки -----
-document.getElementById('btn-play').addEventListener("click", () => {
-    if (animTime >= params.T) {
-        animTime = 0;
-        lastTime = null;
-        ball.position.set(points[0].x, points[0].z, points[0].y);
-        trail.geometry.setDrawRange(0, 0);
-    }
+function resetAnimation() {
+    playing = false; animTime = 0; lastTime = null;
+    ballNoAir.position.set(dataNoAir.points[0].x, dataNoAir.points[0].y, dataNoAir.points[0].z);
+    ballAir.position.set(dataAir.points[0].x, dataAir.points[0].y, dataAir.points[0].z);
+    trailNoAir.geometry.setDrawRange(0, 0);
+    trailAir.geometry.setDrawRange(0, 0);
+    updateLiveStats(dataNoAir.points[0], dataAir.points[0]);
+}
+
+document.getElementById('btn-play').addEventListener('click', () => {
+    if (!playing && animTime === 0) resetAnimation();
     playing = true;
-})
-document.getElementById('btn-pause').addEventListener('click', () => {
-    playing = false;
-    lastTime = null;
 });
-document.getElementById('btn-reset').addEventListener('click', () => {
-    playing = false;
-    animTime = 0;
-    lastTime = null;
-
-    ball.position.set(points[0].x, points[0].z, points[0].y);
-
-    trail.geometry.setDrawRange(0, 0);
-    const firstP = points[0];
-    updateStatistic(firstP.x,firstP.y,firstP.t,firstP.v);
-})
-
-document.getElementById("btn-reset-cam").addEventListener('click', ()=>{
-    spherical.theta = DEFAULT_SPHERICAL.theta;
-    spherical.phi = DEFAULT_SPHERICAL.phi;
-    spherical.radius = DEFAULT_SPHERICAL.radius;
+document.getElementById('btn-pause').addEventListener('click', () => {
+    playing = false; lastTime = null;
+});
+document.getElementById('btn-reset').addEventListener('click', resetAnimation);
+document.getElementById('btn-reset-cam').addEventListener('click', () => {
+    spherical = { ...DEFAULT_SPHERICAL };
     target.copy(DEFAULT_TARGET);
     updateCamera();
-})
+});
 // endregion
 
 // region ----- Слайдери -----
 function rebuildAll() {
-    playing = false;
-    animTime = 0;
-    lastTime = null;
-    params.x0 = parseFloat(document.getElementById('sl-x0').value);
-    params.y0 = parseFloat(document.getElementById('sl-y0').value);
-    params.v0 = parseFloat(document.getElementById('sl-v0').value);
-    params.phi = parseFloat(document.getElementById('sl-phi').value);
-    params.a = parseFloat(document.getElementById('sl-a').value);
-    params.T = parseFloat(document.getElementById('sl-t').value);
+    playing = false; animTime = 0; lastTime = null;
 
+    params.x0     = parseFloat(document.getElementById('sl-x0').value);
+    params.y0     = parseFloat(document.getElementById('sl-y0').value);
+    params.z0     = parseFloat(document.getElementById('sl-z0').value);
+    params.v0     = parseFloat(document.getElementById('sl-v0').value);
+    params.alpha  = parseFloat(document.getElementById('sl-alpha').value);
+    params.beta   = parseFloat(document.getElementById('sl-beta').value);
+    params.g      = parseFloat(document.getElementById('sl-g').value);
+    params.k      = parseFloat(document.getElementById('sl-k').value);
+    params.deltaT = parseFloat(document.getElementById('sl-deltaT').value);
 
-    trajectoryLine.geometry.dispose();
-    trajectoryLine.material.dispose();
-    scene.remove(trajectoryLine);
-
-    trail.geometry.dispose();
-    trail.material.dispose();
-    scene.remove(trail);
-
-    scene.remove(ball);
-    ball.geometry.dispose();
-    ball.material.dispose();
-
-    //скидання points
-
-    points = calculatePoints(params);
+    dataNoAir = calculateDataForNoAirResistance(params);
+    dataAir   = calculateDataForAirResistance(params);
 
     buildScene();
-    trajectoryLine = buildTrajectory();
-    ball = createBall();
-    trail = createTrail();
-
-    const firstP = points[0];
-    updateStatistic(firstP.x, firstP.y, firstP.t, firstP.v);
-
-    // fitCamera();
+    rebuildObjects();
+    updateStats();
+    updateLiveStats(dataNoAir.points[0], dataAir.points[0]);
 }
 
-function fitCamera() {
-    const lastP = points[points.length - 1];
-
-    // центр траєкторії
-    target.set(lastP.x / 2, lastP.z / 2, lastP.y / 2);
-
-    // відстань — щоб вся траєкторія влізла
-    const maxDist = Math.max(lastP.x, lastP.z, lastP.y);
-    spherical.radius = maxDist * 2;
-
-    updateCamera();
-}
-
-['x0', 'y0', 'v0', 'phi', 'a', 't',].forEach(name => {
+['x0','y0','z0','v0','alpha','beta','g','k','deltaT'].forEach(name => {
     const slider = document.getElementById(`sl-${name}`);
-    const label = document.getElementById(`val-${name}`);
-
+    const label  = document.getElementById(`val-${name}`);
+    if (!slider) return;
     slider.addEventListener('input', () => {
         label.textContent = slider.value;
         rebuildAll();
@@ -524,22 +421,16 @@ function fitCamera() {
 });
 // endregion
 
-// region ----- Статистика -----
-function updateStatistic(x, y, t, v) {
-    document.getElementById("stat-x").textContent = x.toFixed(2);
-    document.getElementById("stat-y").textContent = y.toFixed(2);
-    document.getElementById("stat-t").textContent = t.toFixed(2);
-    document.getElementById("stat-v").textContent = v.toFixed(2);
-
-}
-
+// region ----- Ініціалізація -----
+buildScene();
+rebuildObjects();
+updateStats();
+updateLiveStats(dataNoAir.points[0], dataAir.points[0]);
+animationLoop();
 // endregion
 
 window.addEventListener('resize', () => {
     renderer.setSize(canvasWrapper.clientWidth, canvasWrapper.clientHeight);
     camera.aspect = canvasWrapper.clientWidth / canvasWrapper.clientHeight;
-    camera.updateProjectionMatrix();// Матриця проєкцій визначає як 3D сцена проєктується на 2D екран
-    // оновлюємо, щоб вона забезпечувала правильне відображення сцени на екрані
+    camera.updateProjectionMatrix();
 });
-
-

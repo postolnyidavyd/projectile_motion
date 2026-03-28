@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
     <title>Моделювання тіла кинутого під кутом до горизонту</title>
@@ -9,37 +9,32 @@
 </head>
 <body>
 <div id="sidebar">
+
     <div id="controls">
-        <p class="section-title">Управління анімацією</p>
+        <p class="section-title">Анімація</p>
         <div class="btn-row">
-        <button id="btn-play">▶ Грати</button>
-        <button id="btn-pause">⏸ Пауза</button>
-        <button id="btn-reset">■ Скинути</button>
+            <button id="btn-play">▶ Грати</button>
+            <button id="btn-pause">⏸ Пауза</button>
+            <button id="btn-reset">■ Скинути</button>
+        </div>
+        <div class="btn-row">
+            <button id="btn-reset-cam">↺ Скинути камеру</button>
         </div>
     </div>
-    <div id="camera-controls">
-        <p class="section-title">Управління камерою</p>
-        <div class="btn-row">
-        <button id="btn-reset-cam">↺ Скинути камеру</button>
-        </div>
-    </div>
+
     <div id="sliders">
         <p class="section-title">Параметри</p>
         <div class="slider-group">
-            <label>v₀: <span id="val-v0">20</span> м/с</label>
-            <input type="range" id="sl-v0" min="1" max="40" value="20" step="1">
+            <label>v₀: <span id="val-v0">30</span> м/с</label>
+            <input type="range" id="sl-v0" min="1" max="100" value="30" step="1">
         </div>
         <div class="slider-group">
-            <label>φ: <span id="val-phi">40</span>°</label>
-            <input type="range" id="sl-phi" min="0" max="360" value="40" step="1">
+            <label>α: <span id="val-alpha">45</span>°</label>
+            <input type="range" id="sl-alpha" min="1" max="89" value="45" step="1">
         </div>
         <div class="slider-group">
-            <label>a: <span id="val-a">3</span> м/с²</label>
-            <input type="range" id="sl-a" min="-10" max="10" value="3" step="0.5">
-        </div>
-        <div class="slider-group">
-            <label>T: <span id="val-t">6</span> с</label>
-            <input type="range" id="sl-t" min="1" max="20" value="6" step="1">
+            <label>β: <span id="val-beta">0</span>°</label>
+            <input type="range" id="sl-beta" min="-45" max="45" value="0" step="1">
         </div>
         <div class="slider-group">
             <label>x₀: <span id="val-x0">0</span> м</label>
@@ -49,19 +44,79 @@
             <label>y₀: <span id="val-y0">0</span> м</label>
             <input type="range" id="sl-y0" min="-20" max="20" value="0" step="1">
         </div>
+        <div class="slider-group">
+            <label>z₀: <span id="val-z0">0</span> м</label>
+            <input type="range" id="sl-z0" min="-20" max="20" value="0" step="1">
+        </div>
+        <div class="slider-group">
+            <label>g: <span id="val-g">9.81</span> м/с²</label>
+            <input type="range" id="sl-g" min="1" max="20" value="9.81" step="0.01">
+        </div>
+        <div class="slider-group">
+            <label>k: <span id="val-k">0.05</span> м⁻¹</label>
+            <input type="range" id="sl-k" min="0" max="0.5" value="0.05" step="0.01">
+        </div>
+        <div class="slider-group">
+            <label>Δt: <span id="val-deltaT">0.02</span> с</label>
+            <input type="range" id="sl-deltaT" min="0.01" max="0.05" value="0.02" step="0.01">
+        </div>
     </div>
 
     <div id="stats">
-        <p class="section-title">Стан</p>
-        <div class="stat">x(t): <span id="stat-x">0</span> м</div>
-        <div class="stat">y(t): <span id="stat-y">0</span> м</div>
-        <div class="stat">t: <span id="stat-t">0</span> с</div>
-        <div class="stat">v(t): <span id="stat-v">0</span> м/с</div>
+        <p class="section-title">Статистика</p>
+
+        <div class="stats-section">
+            <p class="sub-label">Характеристики польоту</p>
+
+            <div class="stat-block stat-block--noair">
+                <p class="stat-label">Без опору</p>
+                <div class="stat-grid">
+                    <div class="stat">L: <span id="stat-na-L">—</span> м</div>
+                    <div class="stat">T: <span id="stat-na-T">—</span> с</div>
+                    <div class="stat">H: <span id="stat-na-H">—</span> м</div>
+                </div>
+            </div>
+
+            <div class="stat-block stat-block--air">
+                <p class="stat-label">З опором</p>
+                <div class="stat-grid">
+                    <div class="stat">L: <span id="stat-a-L">—</span> м</div>
+                    <div class="stat">T: <span id="stat-a-T">—</span> с</div>
+                    <div class="stat">H: <span id="stat-a-H">—</span> м</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <p class="sub-label">Поточні дані анімації</p>
+
+            <div class="stat-block stat-block--noair">
+                <p class="stat-label">Без опору</p>
+                <div class="stat-grid">
+                    <div class="stat">x: <span id="stat-na-x">0</span> м</div>
+                    <div class="stat">y: <span id="stat-na-y">0</span> м</div>
+                    <div class="stat">z: <span id="stat-na-z">0</span> м</div>
+                    <div class="stat">v: <span id="stat-na-v">0</span> м/с</div>
+                    <div class="stat">t: <span id="stat-na-t">0</span> с</div>
+                </div>
+            </div>
+
+            <div class="stat-block stat-block--air">
+                <p class="stat-label">З опором</p>
+                <div class="stat-grid">
+                    <div class="stat">x: <span id="stat-a-x">0</span> м</div>
+                    <div class="stat">y: <span id="stat-a-y">0</span> м</div>
+                    <div class="stat">z: <span id="stat-a-z">0</span> м</div>
+                    <div class="stat">v: <span id="stat-a-v">0</span> м/с</div>
+                    <div class="stat">t: <span id="stat-a-t">0</span> с</div>
+                </div>
+            </div>
+        </div>
     </div>
+
 </div>
 <div id="canvas-wrapper">
-<canvas id="three-canvas"></canvas>
+    <canvas id="three-canvas"></canvas>
 </div>
-
 </body>
 </html>
