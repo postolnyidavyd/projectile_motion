@@ -166,6 +166,49 @@ function calculateDataForNoAirResistance(params) {
 
     return { T, H, L, points };
 }
+
+function calculateDataForAirResistance(params) {
+    const { x0, y0, z0, v0, g, k, deltaT } = params;
+    const alpha = toRadians(params.alpha);
+    const beta  = toRadians(params.beta);
+
+    let vx = v0 * Math.cos(alpha) * Math.cos(beta);
+    let vy = v0 * Math.sin(alpha);
+    let vz = v0 * Math.cos(alpha) * Math.sin(beta);
+
+    let x = x0, y = y0, z = z0, t = 0;
+    let H = y0;
+    let crossedZero = false;
+
+    const points = [];
+
+    while (!crossedZero || y >= 0) {
+        if (y >= 0) crossedZero = true;
+
+        points.push({ x, y, z, v: Math.sqrt(vx**2 + vy**2 + vz**2), t });
+
+        const v  = Math.sqrt(vx**2 + vy**2 + vz**2);
+        const ax = -k * v * vx;
+        const ay = -g - k * v * vy;
+        const az = -k * v * vz;
+
+        vx += ax * deltaT;
+        vy += ay * deltaT;
+        vz += az * deltaT;
+
+        x += vx * deltaT;
+        y += vy * deltaT;
+        z += vz * deltaT;
+        t += deltaT;
+
+        if (y > H) H = y;
+    }
+
+    const T = t;
+    const L = Math.sqrt((x - x0)**2 + (z - z0)**2);
+
+    return { T, H, L, points };
+}
 let points = calculatePoints(params);
 let firstP = points[0];
 updateStatistic(firstP.x, firstP.y, firstP.t, firstP.v);
