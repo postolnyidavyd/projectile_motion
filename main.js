@@ -141,7 +141,31 @@ function calculatePoints(params) {
 
     return points
 }
+function calculateDataForNoAirResistance(params) {
+    const { x0, y0, z0, v0, g, deltaT } = params;
+    const alpha = toRadians(params.alpha);
+    const beta  = toRadians(params.beta);
 
+    const vx0 = v0 * Math.cos(alpha) * Math.cos(beta);
+    const vy0 = v0 * Math.sin(alpha);
+    const vz0 = v0 * Math.cos(alpha) * Math.sin(beta);
+
+    const D = vy0 ** 2 + 2 * g * y0;
+    const T = (vy0 + Math.sqrt(D)) / g;
+    const H = y0 + (vy0 ** 2) / (2 * g);
+    const L = T * Math.sqrt(vx0 ** 2 + vz0 ** 2);
+
+    const points = [];
+    for (let t = 0; t <= T; t += deltaT) {
+        const x = x0 + vx0 * t;
+        const y = y0 + vy0 * t - g * t ** 2 / 2;
+        const z = z0 + vz0 * t;
+        const v = Math.sqrt(vx0 ** 2 + (vy0 - g * t) ** 2 + vz0 ** 2);
+        points.push({ x, y, z, v, t });
+    }
+
+    return { T, H, L, points };
+}
 let points = calculatePoints(params);
 let firstP = points[0];
 updateStatistic(firstP.x, firstP.y, firstP.t, firstP.v);
