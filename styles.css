@@ -22,7 +22,7 @@ body {
     color: var(--text);
 }
 
-/* ── Sidebar ── */
+/* -- Sidebar -- */
 #sidebar {
     width: 280px;
     flex-shrink: 0;
@@ -74,7 +74,7 @@ body {
     gap: 12px;
 }
 
-/* ── Buttons ── */
+/* -- Buttons -- */
 #controls { display: flex; flex-direction: column; gap: 6px; }
 
 .btn-row { display: flex; gap: 6px; }
@@ -92,7 +92,7 @@ button {
 }
 button:hover { border-color: var(--noair); color: var(--noair); }
 
-/* ── Sliders ── */
+/* -- Sliders -- */
 .slider-group {
     display: flex;
     flex-direction: column;
@@ -126,7 +126,7 @@ input[type=range]::-webkit-slider-thumb {
     cursor: pointer;
 }
 
-/* ── Stats ── */
+/* -- Stats -- */
 #stats { display: flex; flex-direction: column; gap: 10px; }
 
 .stat-block {
@@ -168,6 +168,30 @@ input[type=range]::-webkit-slider-thumb {
 .stat-block--noair .stat span { color: var(--noair); }
 .stat-block--air   .stat span { color: var(--air); }
 
-/* ── Canvas ── */
+/* -- Canvas -- */
 #canvas-wrapper { flex: 1; height: 100vh; }
 #three-canvas   { display: block; width: 100%; height: 100%; }
+
+/* -- CustomAlert -- */
+.custom-alert {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ff4444;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    transition: opacity 0.3s ease, top 0.3s ease;
+    opacity: 1;
+}
+
+.custom-alert.hidden {
+    opacity: 0;
+    top: -50px;
+    pointer-events: none;
+}
