@@ -23,7 +23,29 @@ const COLORS = {
 
 const ALERT_TIMEOUTS = {};
 // endregion
+// region ----- Утиліти -----
+function disposeObj(obj) {
+    if (!obj) return;
+    obj.geometry?.dispose();
+    if (obj.material) {
+        if (obj.material.map) obj.material.map.dispose();
+        obj.material.dispose();
+    }
+    scene.remove(obj);
+}
 
+function disposeGroup(group) {
+    if (!group) return;
+    group.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+            if (obj.material.map) obj.material.map.dispose();
+            obj.material.dispose();
+        }
+    });
+    scene.remove(group);
+}
+//endregion
 // region ----- Параметри -----
 const params = {... DEFAULT_PARAMS};
 // endregion
@@ -187,17 +209,28 @@ let dataNoAir = calculateDataForNoAirResistance(params);
 let dataAir = calculateDataForAirResistance(params);
 // endregion
 
+
 // region ----- Сітка та осі -----
 let gridHelper = null;
-let axesGroup = null;
+let axesGroup  = null;
+let lastSceneSize = null;
 
 function buildScene() {
-    if (gridHelper) scene.remove(gridHelper);
-    if (axesGroup) scene.remove(axesGroup);
-
     const allPoints = [...dataNoAir.points, ...dataAir.points];
-    const maxVal = allPoints.reduce((m, p) => Math.max(m, Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)), 0);
+    const maxVal = allPoints.reduce(
+        (m, p) => Math.max(m, Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)), 0
+    );
     const sceneSize = Math.ceil(maxVal / 10) * 10 + 20;
+
+    if (sceneSize === lastSceneSize) return;
+    lastSceneSize = sceneSize;
+
+    if (gridHelper) {
+        scene.remove(gridHelper);
+        gridHelper.geometry.dispose();
+        gridHelper.material.dispose();
+    }
+    disposeGroup(axesGroup);
 
     gridHelper = new THREE.GridHelper(sceneSize * 2, sceneSize / 5, 0x444444, 0x222222);
     scene.add(gridHelper);
@@ -207,68 +240,72 @@ function buildScene() {
     const markFreq = 10, markSize = 0.5;
     const colX = 0xff4444, colY = 0x44ff44, colZ = 0x4488ff;
 
-    function line(from, to, color) {
-        const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...from), new THREE.Vector3(...to)]);
-        return new THREE.Line(g, new THREE.LineBasicMaterial({color}));
+    function makeLine(from, to, color) {
+        const g = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(...from), new THREE.Vector3(...to)
+        ]);
+        return new THREE.Line(g, new THREE.LineBasicMaterial({ color }));
     }
 
-    function dashed(from, to, color) {
-        const pts = [], s = new THREE.Vector3(...from), e = new THREE.Vector3(...to);
+    function makeDashed(from, to, color) {
+        const pts = [];
+        const s = new THREE.Vector3(...from), e = new THREE.Vector3(...to);
         for (let i = 0; i < 20; i += 2) {
             pts.push(s.clone().lerp(e, i / 20));
             pts.push(s.clone().lerp(e, (i + 0.8) / 20));
         }
-        return new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({color}));
+        return new THREE.LineSegments(
+            new THREE.BufferGeometry().setFromPoints(pts),
+            new THREE.LineBasicMaterial({ color })
+        );
     }
 
-    function label(text, pos, color) {
+    function makeLabel(text, pos, color) {
         const cv = document.createElement('canvas');
-        cv.width = 256;
-        cv.height = 128;
-        const c = cv.getContext('2d');
-        c.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
-        c.font = 'bold 96px monospace';
-        c.textAlign = 'center';
-        c.textBaseline = 'middle';
-        c.fillText(text, 128, 64);
-        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: new THREE.CanvasTexture(cv),
-            transparent: true
-        }));
+        cv.width = 256; cv.height = 128;
+        const ctx = cv.getContext('2d');
+        ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+        ctx.font = 'bold 96px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 128, 64);
+        const texture = new THREE.CanvasTexture(cv);
+        const sprite = new THREE.Sprite(
+            new THREE.SpriteMaterial({ map: texture, transparent: true })
+        );
         sprite.position.set(...pos);
         sprite.scale.set(8, 4, 1);
         return sprite;
     }
 
     // X
-    axesGroup.add(line([0, 0, 0], [len, 0, 0], colX));
-    axesGroup.add(dashed([0, 0, 0], [-len, 0, 0], colX));
-    axesGroup.add(label('X', [len + 4, 0, 0], colX));
+    axesGroup.add(makeLine([0,0,0], [len,0,0], colX));
+    axesGroup.add(makeDashed([0,0,0], [-len,0,0], colX));
+    axesGroup.add(makeLabel('X', [len+4,0,0], colX));
     for (let i = -len; i <= len; i += markFreq) {
         if (i === 0) continue;
-        axesGroup.add(line([i, 0, -markSize], [i, 0, markSize], colX));
-        axesGroup.add(label(`${i}`, [i, 0, -3], colX));
+        axesGroup.add(makeLine([i,0,-markSize], [i,0,markSize], colX));
+        axesGroup.add(makeLabel(`${i}`, [i,0,-3], colX));
     }
-    // Y (висота)
-    axesGroup.add(line([0, 0, 0], [0, len, 0], colY));
-    axesGroup.add(label('Y', [0, len + 4, 0], colY));
+    // Y
+    axesGroup.add(makeLine([0,0,0], [0,len,0], colY));
+    axesGroup.add(makeLabel('Y', [0,len+4,0], colY));
     for (let i = markFreq; i <= len; i += markFreq) {
-        axesGroup.add(line([-markSize, i, 0], [markSize, i, 0], colY));
-        axesGroup.add(label(`${i}`, [-4, i, 0], colY));
+        axesGroup.add(makeLine([-markSize,i,0], [markSize,i,0], colY));
+        axesGroup.add(makeLabel(`${i}`, [-4,i,0], colY));
     }
     // Z
-    axesGroup.add(line([0, 0, 0], [0, 0, len], colZ));
-    axesGroup.add(dashed([0, 0, 0], [0, 0, -len], colZ));
-    axesGroup.add(label('Z', [0, 0, len + 4], colZ));
+    axesGroup.add(makeLine([0,0,0], [0,0,len], colZ));
+    axesGroup.add(makeDashed([0,0,0], [0,0,-len], colZ));
+    axesGroup.add(makeLabel('Z', [0,0,len+4], colZ));
     for (let i = -len; i <= len; i += markFreq) {
         if (i === 0) continue;
-        axesGroup.add(line([-markSize, 0, i], [markSize, 0, i], colZ));
-        axesGroup.add(label(`${i}`, [-3, 0, i], colZ));
+        axesGroup.add(makeLine([-markSize,0,i], [markSize,0,i], colZ));
+        axesGroup.add(makeLabel(`${i}`, [-3,0,i], colZ));
     }
 
     scene.add(axesGroup);
 }
-
 // endregion
 
 // region ----- Об'єкти сцени -----
@@ -276,17 +313,18 @@ let lineNoAir, lineAir, ballNoAir, ballAir, trailNoAir, trailAir;
 
 function buildLine(points, color) {
     const vecs = points.map(p => new THREE.Vector3(p.x, p.y, p.z));
-    const geo = new THREE.BufferGeometry().setFromPoints(vecs);
-    const mat = new THREE.LineBasicMaterial({color});
-    const line = new THREE.Line(geo, mat);
+    const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(vecs),
+        new THREE.LineBasicMaterial({ color })
+    );
     scene.add(line);
     return line;
 }
 
 function buildBall(p, color) {
     const ball = new THREE.Mesh(
-        new THREE.SphereGeometry(1, 32, 32),
-        new THREE.MeshBasicMaterial({color})
+        new THREE.SphereGeometry(1, 16, 16), // 16 замість 32 — вдвічі менше трикутників
+        new THREE.MeshBasicMaterial({ color })
     );
     ball.position.set(p.x, p.y, p.z);
     scene.add(ball);
@@ -296,41 +334,28 @@ function buildBall(p, color) {
 function buildTrail(points, color) {
     const pos = new Float32Array(points.length * 3);
     points.forEach((p, i) => {
-        pos[i * 3] = p.x;
-        pos[i * 3 + 1] = p.y;
-        pos[i * 3 + 2] = p.z;
+        pos[i*3] = p.x; pos[i*3+1] = p.y; pos[i*3+2] = p.z;
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setDrawRange(0, 0);
-    const trail = new THREE.Line(geo, new THREE.LineBasicMaterial({color}));
+    const trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ color }));
     scene.add(trail);
     return trail;
 }
 
-function disposeObj(obj) {
-    if (!obj) return;
-    obj.geometry?.dispose();
-    obj.material?.dispose();
-    scene.remove(obj);
-}
-
 function rebuildObjects() {
-    disposeObj(lineNoAir);
-    disposeObj(lineAir);
-    disposeObj(ballNoAir);
-    disposeObj(ballAir);
-    disposeObj(trailNoAir);
-    disposeObj(trailAir);
+    disposeObj(lineNoAir); disposeObj(lineAir);
+    disposeObj(ballNoAir); disposeObj(ballAir);
+    disposeObj(trailNoAir); disposeObj(trailAir);
 
-    lineNoAir = buildLine(dataNoAir.points, COLORS.noAir);
-    lineAir = buildLine(dataAir.points, COLORS.air);
-    ballNoAir = buildBall(dataNoAir.points[0], COLORS.noAir);
-    ballAir = buildBall(dataAir.points[0], COLORS.air);
+    lineNoAir  = buildLine(dataNoAir.points, COLORS.noAir);
+    lineAir    = buildLine(dataAir.points,   COLORS.air);
+    ballNoAir  = buildBall(dataNoAir.points[0], COLORS.noAir);
+    ballAir    = buildBall(dataAir.points[0],   COLORS.air);
     trailNoAir = buildTrail(dataNoAir.points, COLORS.noAir);
-    trailAir = buildTrail(dataAir.points, COLORS.air);
+    trailAir   = buildTrail(dataAir.points,   COLORS.air);
 }
-
 // endregion
 
 // region ----- Статистика -----
@@ -450,41 +475,48 @@ document.getElementById('btn-reset-params').addEventListener('click', () => {
 });
 // endregion
 
-// region ----- Слайдери -----
-function rebuildAll() {
-    playing = false;
-    animTime = 0;
-    lastTime = null;
 
-    params.x0 = parseFloat(document.getElementById('sl-x0').value);
-    params.y0 = parseFloat(document.getElementById('sl-y0').value);
-    params.z0 = parseFloat(document.getElementById('sl-z0').value);
-    params.v0 = parseFloat(document.getElementById('sl-v0').value);
+// region ----- Слайдери -----
+let rebuildTimer = null;
+
+function rebuildAll() {
+    playing = false; animTime = 0; lastTime = null;
+
+    params.x0    = parseFloat(document.getElementById('sl-x0').value);
+    params.y0    = parseFloat(document.getElementById('sl-y0').value);
+    params.z0    = parseFloat(document.getElementById('sl-z0').value);
+    params.v0    = parseFloat(document.getElementById('sl-v0').value);
     params.alpha = parseFloat(document.getElementById('sl-alpha').value);
-    params.beta = parseFloat(document.getElementById('sl-beta').value);
-    params.g = parseFloat(document.getElementById('sl-g').value);
-    params.k = parseFloat(document.getElementById('sl-k').value);
-    params.deltaT = parseFloat(document.getElementById('sl-deltaT').value);
+    params.beta  = parseFloat(document.getElementById('sl-beta').value);
+    params.g     = parseFloat(document.getElementById('sl-g').value);
+    params.k     = parseFloat(document.getElementById('sl-k').value);
+    params.deltaT= parseFloat(document.getElementById('sl-deltaT').value);
 
     dataNoAir = calculateDataForNoAirResistance(params);
-    dataAir = calculateDataForAirResistance(params);
+    dataAir   = calculateDataForAirResistance(params);
 
-    buildScene();
+    buildScene();      // перебудовує осі лише якщо sceneSize змінився
     rebuildObjects();
     updateStats();
     updateLiveStats(dataNoAir.points[0], dataAir.points[0]);
 }
 
-['x0', 'y0', 'z0', 'v0', 'alpha', 'beta', 'g', 'k', 'deltaT'].forEach(name => {
+function rebuildAllDebounced() {
+    if (rebuildTimer) clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(rebuildAll, 60); // чекаємо 60мс після останньої зміни
+}
+
+['x0','y0','z0','v0','alpha','beta','g','k','deltaT'].forEach(name => {
     const slider = document.getElementById(`sl-${name}`);
-    const label = document.getElementById(`val-${name}`);
+    const label  = document.getElementById(`val-${name}`);
     if (!slider) return;
     slider.addEventListener('input', () => {
         label.textContent = slider.value;
-        rebuildAll();
+        rebuildAllDebounced(); // дебаунс замість миттєвого rebuild
     });
 });
 // endregion
+
 // region ----- Попередження -----
 
 
