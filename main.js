@@ -5,18 +5,7 @@ const canvasWrapper = document.getElementById('canvas-wrapper');
 const canvas = document.getElementById('three-canvas');
 const DEFAULT_SPHERICAL = {theta: -0.8, phi: 1.0, radius: 120};
 const DEFAULT_TARGET = new THREE.Vector3(20, 10, 0);
-const toRadians = (angle) => angle * Math.PI / 180;
-
-const COLORS = {
-    noAir: 0x00cfff,   // червона — без опору
-    air: 0xff4444,   // блакитна — з опором
-};
-
-let ALERT_TIMEOUT;
-// endregion
-
-// region ----- Параметри -----
-const params = {
+const DEFAULT_PARAMS = {
     x0: 0, y0: 0, z0: 0,
     v0: 30,
     alpha: 45,
@@ -25,6 +14,18 @@ const params = {
     k: 0.05,
     deltaT: 0.02,
 };
+const toRadians = (angle) => angle * Math.PI / 180;
+
+const COLORS = {
+    noAir: 0x00cfff,   // червона — без опору
+    air: 0xff4444,   // блакитна — з опором
+};
+
+const ALERT_TIMEOUTS = {};
+// endregion
+
+// region ----- Параметри -----
+const params = {... DEFAULT_PARAMS};
 // endregion
 
 // region ----- Рендер / Сцена / Камера -----
@@ -96,6 +97,7 @@ updateCamera();
 
 // region ----- Обчислення -----
 function calculateDataForNoAirResistance(params) {
+    clearAsyncAlert("alert-noair")
     const {x0, y0, z0, v0, g, deltaT} = params;
     const alpha = toRadians(params.alpha);
     const beta = toRadians(params.beta);
@@ -105,6 +107,13 @@ function calculateDataForNoAirResistance(params) {
     const vz0 = v0 * Math.cos(alpha) * Math.sin(beta);
 
     const D = vy0 ** 2 + 2 * g * y0;
+
+    // Захист: якщо дискримінант від'ємний, корінь неможливий (тіло не перетне y=0)
+    if (D < 0) {
+        showAsyncAlert('alert-noair', "Помилка моделювання без опору: за таких початкових умов тіло ніколи не досягне поверхні (y=0).", 6000);
+        return { T: 0, H: y0, L: 0, points: [{ x: x0, y: y0, z: z0, v: v0, t: 0 }] };
+    }
+
     const T = (vy0 + Math.sqrt(D)) / g;
     const H = y0 + (vy0 ** 2) / (2 * g);
     const L = T * Math.sqrt(vx0 ** 2 + vz0 ** 2);
@@ -117,11 +126,19 @@ function calculateDataForNoAirResistance(params) {
         const v = Math.sqrt(vx0 ** 2 + (vy0 - g * t) ** 2 + vz0 ** 2);
         points.push({x, y, z, v, t});
     }
+
+    // Примусово додаємо фінальну точку удару об землю для точності графіки
+    const finalX = x0 + vx0 * T;
+    const finalY = y0 + vy0 * T - g * T ** 2 / 2;
+    const finalZ = z0 + vz0 * T;
+    const finalV = Math.sqrt(vx0 ** 2 + (vy0 - g * T) ** 2 + vz0 ** 2);
+    points.push({ x: finalX, y: finalY, z: finalZ, v: finalV, t: T });
+
     return {T, H, L, points};
 }
 
 function calculateDataForAirResistance(params) {
-    clearAsyncAlert();
+    clearAsyncAlert('alert-air');
     const {x0, y0, z0, v0, g, k, deltaT} = params;
     const alpha = toRadians(params.alpha);
     const beta = toRadians(params.beta);
@@ -139,7 +156,7 @@ function calculateDataForAirResistance(params) {
         if (y >= 0) crossedZero = true;
         //Захист від безкінечного циклу якщо y ніколи не перетинає
         if (y < y0 && !crossedZero) {
-            showAsyncAlert("Помилка моделювання для тіла з опором повітря: за таких початкових умов тіло летить вниз і ніколи не досягне поверхні (y=0).", 6000);
+            showAsyncAlert('alert-air', "Помилка моделювання з опором повітря:за таких початкових умов тіло летить вниз і ніколи не досягне поверхні (y=0).", 6000);
             break;
         }
         points.push({x, y, z, v: Math.sqrt(vx ** 2 + vy ** 2 + vz ** 2), t});
@@ -417,6 +434,20 @@ document.getElementById('btn-reset-cam').addEventListener('click', () => {
     target.copy(DEFAULT_TARGET);
     updateCamera();
 });
+
+document.getElementById('btn-reset-params').addEventListener('click', () => {
+    Object.keys(DEFAULT_PARAMS).forEach(key => {
+        const slider = document.getElementById(`sl-${key}`);
+        const label = document.getElementById(`val-${key}`);
+
+        if (slider && label) {
+            slider.value = DEFAULT_PARAMS[key];
+            label.textContent = DEFAULT_PARAMS[key];
+        }
+    });
+
+    rebuildAll();
+});
 // endregion
 
 // region ----- Слайдери -----
@@ -457,21 +488,24 @@ function rebuildAll() {
 // region ----- Попередження -----
 
 
-function showAsyncAlert(message, duration = 4000) {
-    const alertBox = document.getElementById('custom-alert');
+function showAsyncAlert(id, message, duration = 6000) {
+    const alertBox = document.getElementById(id);
+    if (!alertBox) return;
+
     alertBox.textContent = message;
     alertBox.classList.remove('hidden');
 
-    if (ALERT_TIMEOUT) clearTimeout(ALERT_TIMEOUT);
+    if (ALERT_TIMEOUTS[id]) clearTimeout(ALERT_TIMEOUTS[id]);
 
-    ALERT_TIMEOUT = setTimeout(() => {
+    ALERT_TIMEOUTS[id] = setTimeout(() => {
         alertBox.classList.add('hidden');
     }, duration);
 }
-function clearAsyncAlert(){
-    clearTimeout(ALERT_TIMEOUT);
-    const alertBox = document.getElementById('custom-alert');
-    alertBox.classList.add('hidden');
+
+function clearAsyncAlert(id) {
+    const alertBox = document.getElementById(id);
+    if (alertBox) alertBox.classList.add('hidden');
+    if (ALERT_TIMEOUTS[id]) clearTimeout(ALERT_TIMEOUTS[id]);
 }
 // endregion
 // region ----- Ініціалізація -----

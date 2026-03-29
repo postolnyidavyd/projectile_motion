@@ -9,7 +9,10 @@
 </head>
 
 <body>
-<div id="custom-alert" class="custom-alert hidden"></div>
+<div id="alert-container" class="alert-container">
+    <div id="alert-noair" class="custom-alert hidden"></div>
+    <div id="alert-air" class="custom-alert hidden"></div>
+</div>
 <div id="sidebar">
 
     <div id="controls">
@@ -26,6 +29,9 @@
 
     <div id="sliders">
         <p class="section-title">Параметри</p>
+        <div class="btn-row" style="margin-bottom: 12px;">
+            <button id="btn-reset-params">↺ Скинути параметри</button>
+        </div>
         <div class="slider-group">
             <label>v₀: <span id="val-v0">30</span> м/с</label>
             <input type="range" id="sl-v0" min="1" max="100" value="30" step="1">
